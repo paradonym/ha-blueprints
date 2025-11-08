@@ -58,7 +58,7 @@ action:
       
       - conditions:
           - condition: template
-            value_template: "{{ command == 'press' and trigger.event.data.args.press_type == 'short' and trigger.event.data.args.step_mode == 1 }}"
+            value_template: "{{ command == 'press' and trigger.event.data.args[0] == 257 }}"
         sequence:
           - service: light.turn_on
             target:
@@ -80,7 +80,7 @@ action:
       
       - conditions:
           - condition: template
-            value_template: "{{ command == 'press' and trigger.event.data.args.press_type == 'short' and trigger.event.data.args.step_mode == 0 }}"
+            value_template: "{{ command == 'press' and trigger.event.data.args[0] == 256 }}"
         sequence:
           - service: light.turn_on
             target:

@@ -1,5 +1,5 @@
 blueprint:
-  name: ZHA – IKEA STYRBAR all controls & dynamic color cycling (no helper)
+  name: ZHA – IKEA STYRBAR Tradfri RGB
   description: >
     Based on https://gist.githubusercontent.com/schiberis/f0134989b60dc811a48b1576c641ca80/raw/2f5214ac8ec8643f5564db3cdce4e02410bcd781/zha-ikea-four-button-remote-styrbar.yaml
 

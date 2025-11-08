@@ -9,14 +9,13 @@ blueprint:
       selector:
         device:
           integration: zha
-          manufacturer: IKEA of Sweden
-          model: RODRET wireless dimmer/power switch
     target_light:
       name: Tradfri RGB Lamp
       description: Select the Tradfri RGB lamp to control
       selector:
         entity:
           domain: light
+          integration: zha
 
 mode: restart
 max_exceeded: silent

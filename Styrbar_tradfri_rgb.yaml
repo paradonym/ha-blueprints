@@ -1,6 +1,6 @@
 blueprint:
-  name: IKEA Styrbar - Tradfri RGB Lamp Control (DEBUG)
-  description: Control IKEA Tradfri RGB lamp with Styrbar remote – DEBUG VERSION
+  name: IKEA Styrbar - Tradfri RGB Lamp Control
+  description: Control IKEA Tradfri RGB lamp with Styrbar remote – FIXED color cycling
   domain: automation
   input:
     remote:
@@ -41,34 +41,19 @@ action:
         - [0.323, 0.329]   # Kaltweiß
       current_color: "{{ state_attr(light, 'xy_color') | list if state_attr(light, 'xy_color') else none }}"
       def_color_idx: >
-        {% set idx = -1 %}
-        {% set min_dist = 1000 %}
+        {% set ns = namespace(idx=-1, min_dist=1000) %}
         {% if current_color %}
           {% for i in range(colors|length) %}
             {% set dist = ((colors[i][0]-current_color[0])**2 + (colors[i][1]-current_color[1])**2) ** 0.5 %}
-            {% if dist < min_dist %}
-              {% set idx = i %}
-              {% set min_dist = dist %}
+            {% if dist < ns.min_dist %}
+              {% set ns.idx = i %}
+              {% set ns.min_dist = dist %}
             {% endif %}
           {% endfor %}
-          {{ idx }}
+          {{ ns.idx }}
         {% else %}
           -1
         {% endif %}
-  
-  # DEBUG LOGGING
-  - service: system_log.write
-    data:
-      message: >
-        STYRBAR DEBUG:
-        command={{ command }},
-        args[0]={{ trigger.event.data.args[0] }},
-        light={{ light }},
-        current_xy={{ current_color }},
-        idx={{ def_color_idx }},
-        next_forward={{ colors[(def_color_idx + 1) % colors|length] if def_color_idx >= 0 else colors[0] }},
-        next_backward={{ colors[(def_color_idx - 1) % colors|length] if def_color_idx >= 0 else colors[-1] }}
-      level: warning
   
   - choose:
       - conditions:
@@ -89,10 +74,6 @@ action:
           - condition: template
             value_template: "{{ command == 'press' and trigger.event.data.args[0] == 257 }}"
         sequence:
-          - service: system_log.write
-            data:
-              message: "STYRBAR: LEFT button - setting color forward"
-              level: warning
           - service: light.turn_on
             target:
               entity_id: "{{ light }}"
@@ -107,10 +88,6 @@ action:
           - condition: template
             value_template: "{{ command == 'press' and trigger.event.data.args[0] == 256 }}"
         sequence:
-          - service: system_log.write
-            data:
-              message: "STYRBAR: RIGHT button - setting color backward"
-              level: warning
           - service: light.turn_on
             target:
               entity_id: "{{ light }}"

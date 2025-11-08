@@ -1,6 +1,6 @@
 blueprint:
-  name: IKEA Styrbar - Tradfri RGB Lamp Control
-  description: Control IKEA Tradfri RGB lamp with Styrbar remote – On/Off and robust color cycling with xy colors
+  name: IKEA Styrbar - Tradfri RGB Lamp Control (DEBUG)
+  description: Control IKEA Tradfri RGB lamp with Styrbar remote – DEBUG VERSION
   domain: automation
   input:
     remote:
@@ -55,6 +55,21 @@ action:
         {% else %}
           -1
         {% endif %}
+  
+  # DEBUG LOGGING
+  - service: system_log.write
+    data:
+      message: >
+        STYRBAR DEBUG:
+        command={{ command }},
+        args[0]={{ trigger.event.data.args[0] }},
+        light={{ light }},
+        current_xy={{ current_color }},
+        idx={{ def_color_idx }},
+        next_forward={{ colors[(def_color_idx + 1) % colors|length] if def_color_idx >= 0 else colors[0] }},
+        next_backward={{ colors[(def_color_idx - 1) % colors|length] if def_color_idx >= 0 else colors[-1] }}
+      level: warning
+  
   - choose:
       - conditions:
           - condition: template
@@ -74,6 +89,10 @@ action:
           - condition: template
             value_template: "{{ command == 'press' and trigger.event.data.args[0] == 257 }}"
         sequence:
+          - service: system_log.write
+            data:
+              message: "STYRBAR: LEFT button - setting color forward"
+              level: warning
           - service: light.turn_on
             target:
               entity_id: "{{ light }}"
@@ -88,6 +107,10 @@ action:
           - condition: template
             value_template: "{{ command == 'press' and trigger.event.data.args[0] == 256 }}"
         sequence:
+          - service: system_log.write
+            data:
+              message: "STYRBAR: RIGHT button - setting color backward"
+              level: warning
           - service: light.turn_on
             target:
               entity_id: "{{ light }}"

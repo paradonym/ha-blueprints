@@ -1,6 +1,6 @@
 blueprint:
   name: IKEA Styrbar - Tradfri RGB Lamp Control
-  description: Control IKEA Tradfri RGB lamp with Styrbar remote – On/Off and robust color cycling
+  description: Control IKEA Tradfri RGB lamp with Styrbar remote – On/Off and robust color cycling with xy colors
   domain: automation
   input:
     remote:
@@ -31,21 +31,21 @@ action:
       command: "{{ trigger.event.data.command }}"
       light: !input target_light
       colors:
-        - [255, 0, 0]      # Rot
-        - [255, 127, 0]    # Orange
-        - [255, 255, 0]    # Gelb
-        - [0, 255, 0]      # Grün
-        - [0, 255, 255]    # Cyan
-        - [0, 0, 255]      # Blau
-        - [255, 0, 255]    # Magenta
-        - [255, 255, 255]  # Weiß
-      current_color: "{{ state_attr(light, 'rgb_color') | list if state_attr(light, 'rgb_color') else none }}"
+        - [0.701, 0.299]   # Rot
+        - [0.561, 0.405]   # Orange
+        - [0.448, 0.517]   # Gelb
+        - [0.172, 0.747]   # Grün
+        - [0.151, 0.343]   # Cyan
+        - [0.136, 0.04]    # Blau
+        - [0.385, 0.155]   # Magenta
+        - [0.323, 0.329]   # Kaltweiß
+      current_color: "{{ state_attr(light, 'xy_color') | list if state_attr(light, 'xy_color') else none }}"
       def_color_idx: >
         {% set idx = -1 %}
         {% set min_dist = 1000 %}
         {% if current_color %}
           {% for i in range(colors|length) %}
-            {% set dist = ((colors[i][0]-current_color[0])**2 + (colors[i][1]-current_color[1])**2 + (colors[i][2]-current_color[2])**2) ** 0.5 %}
+            {% set dist = ((colors[i][0]-current_color[0])**2 + (colors[i][1]-current_color[1])**2) ** 0.5 %}
             {% if dist < min_dist %}
               {% set idx = i %}
               {% set min_dist = dist %}
@@ -78,7 +78,7 @@ action:
             target:
               entity_id: "{{ light }}"
             data:
-              rgb_color: >
+              xy_color: >
                 {% if def_color_idx >= 0 %}
                   {{ colors[(def_color_idx + 1) % colors|length] }}
                 {% else %}
@@ -92,7 +92,7 @@ action:
             target:
               entity_id: "{{ light }}"
             data:
-              rgb_color: >
+              xy_color: >
                 {% if def_color_idx >= 0 %}
                   {{ colors[(def_color_idx - 1) % colors|length] }}
                 {% else %}

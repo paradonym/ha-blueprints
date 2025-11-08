@@ -1,0 +1,396 @@
+blueprint:
+  name: ZHA – IKEA STYRBAR all controls & dynamic color cycling (no helper)
+  description: >
+    Based on https://gist.githubusercontent.com/schiberis/f0134989b60dc811a48b1576c641ca80/raw/2f5214ac8ec8643f5564db3cdce4e02410bcd781/zha-ikea-four-button-remote-styrbar.yaml
+
+    Current state: UNTESTED
+
+    Intention: Changing schiberis blueprint to a STYRBAR that's cycling all colors instead of fixed color settings
+
+    • UP/DOWN (short): ON / OFF
+    • UP/DOWN (hold): brightness settings from schiberis
+    • LEFT/RIGHT (short): cycle through colors dynamically
+      - For RGB lights: rotates through the hue spectrum (60° steps = red→yellow→green→cyan→blue→magenta)
+      - For white lights: cycles through color temperature (warm→neutral→cool)
+    • LEFT/RIGHT (long press): optional actions from schiberis
+
+    Setup notes:
+    1) No helper entity required - color cycling is automatic based on light capabilities
+    2) Adjust hold speed with "Tick interval (ms)" and "Step size (%)".
+    3) Configure hue step size for RGB lights (default 60° = 6 colors per cycle)
+    4) Configure color temp step for white lights (default 100 mireds)
+
+  domain: automation
+
+  input:
+    remote:
+      name: Remote (ZHA device)
+      selector:
+        device:
+          integration: zha
+          manufacturer: IKEA of Sweden
+          model: Remote Control N2
+          multiple: false
+
+    light:
+      name: Light(s)
+      selector:
+        target:
+          entity:
+            domain: light
+
+    # Color cycling configuration
+    hue_step:
+      name: Hue step (degrees) - short press
+      description: Amount to rotate hue for RGB lights on short press. 60° = 6 colors, 30° = 12 colors, etc.
+      default: 60
+      selector:
+        number:
+          min: 15
+          max: 120
+          step: 15
+          unit_of_measurement: '°'
+          mode: slider
+
+    color_temp_step:
+      name: Color temperature step (mireds) - short press
+      description: Amount to change color temperature for white lights on short press.
+      default: 100
+      selector:
+        number:
+          min: 50
+          max: 200
+          step: 25
+          unit_of_measurement: mireds
+          mode: slider
+
+    # Gradient cycling configuration (long press)
+    gradient_hue_step:
+      name: Gradient hue step (degrees)
+      description: Hue rotation per tick during long press. Smaller = smoother gradient. 1-5° recommended.
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          unit_of_measurement: '°'
+          mode: slider
+
+    gradient_temp_step:
+      name: Gradient color temp step (mireds)
+      description: Color temp change per tick during long press. Smaller = smoother. 5-15 recommended.
+      default: 8
+      selector:
+        number:
+          min: 2
+          max: 20
+          step: 1
+          unit_of_measurement: mireds
+          mode: slider
+
+    gradient_tick_ms:
+      name: Gradient tick interval (ms)
+      description: Time between color changes during long press. Smaller = faster cycling.
+      default: 80
+      selector:
+        number:
+          min: 20
+          max: 300
+          step: 10
+          unit_of_measurement: ms
+          mode: slider
+
+    # Hold behavior (tuning) for brightness
+    tick_ms:
+      name: Brightness tick interval (ms)
+      description: Time between brightness steps while holding UP/DOWN. Smaller = faster/smoother.
+      default: 10
+      selector:
+        number:
+          min: 5
+          max: 200
+          step: 5
+          unit_of_measurement: ms
+          mode: slider
+
+    step_pct:
+      name: Brightness step size (% per tick)
+      description: Amount of brightness changed per tick while holding UP/DOWN.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 20
+          step: 1
+          unit_of_measurement: '%'
+          mode: slider
+
+# Restart mode ensures release events cancel the running hold loop immediately (no run-on)
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote
+
+action:
+  # -------- Modern-syntax variables (scoped to this run) --------
+  - variables:
+      tick_ms_input: !input tick_ms
+      step_pct_input: !input step_pct
+      hue_step_input: !input hue_step
+      color_temp_step_input: !input color_temp_step
+      gradient_hue_step_input: !input gradient_hue_step
+      gradient_temp_step_input: !input gradient_temp_step
+      gradient_tick_ms_input: !input gradient_tick_ms
+
+      tick_s: "{{ (tick_ms_input | float(10)) / 1000 }}"
+      gradient_tick_s: "{{ (gradient_tick_ms_input | float(80)) / 1000 }}"
+      step_up: "{{ step_pct_input | int(5) }}"
+      step_down: "{{ (step_pct_input | int(5)) * -1 }}"
+      cap_ticks: 1200  # ~12s watchdog at 10ms ticks (failsafe)
+
+      cmd: "{{ trigger.event.data.command }}"
+      cluster: "{{ trigger.event.data.cluster_id }}"
+      args: "{{ trigger.event.data.args | default([]) }}"
+
+  - choose:
+
+      # --- UP short → ON ---
+      - conditions: "{{ cluster == 6 and cmd == 'on' }}"
+        sequence:
+          - service: light.turn_on
+            target: !input light
+            data: { transition: 0.1 }
+
+      # --- DOWN short → OFF ---
+      - conditions: "{{ cluster == 6 and cmd == 'off' }}"
+        sequence:
+          - service: light.turn_off
+            target: !input light
+
+      # --- HOLD UP (brightness +) — step on timeout, stop on release/opposite ---
+      - conditions: "{{ cluster == 8 and cmd == 'move_with_on_off' }}"
+        sequence:
+          - variables: { _i: 0 }
+          - repeat:
+              sequence:
+                # Wait first; step only if still holding
+                - wait_for_trigger:
+                    # Release / stop
+                    - platform: event
+                      event_type: zha_event
+                      event_data: { device_id: !input remote, cluster_id: 8, command: "stop" }
+                    - platform: event
+                      event_type: zha_event
+                      event_data: { device_id: !input remote, cluster_id: 8, command: "stop_with_on_off" }
+                    # Opposite hold also cancels
+                    - platform: event
+                      event_type: zha_event
+                      event_data: { device_id: !input remote, cluster_id: 8, command: "move" }
+                  timeout: "{{ tick_s }}"
+                  continue_on_timeout: true
+                - choose:
+                    - conditions: "{{ not wait.completed }}"
+                      sequence:
+                        - service: light.turn_on
+                          target: !input light
+                          data: { brightness_step_pct: "{{ step_up }}", transition: 0 }
+                - variables: { _i: "{{ _i + 1 }}" }
+              until:
+                - condition: template
+                  value_template: "{{ wait.completed or (_i | int) >= (cap_ticks | int) }}"
+
+      # --- HOLD DOWN (brightness −) — step on timeout, stop on release/opposite ---
+      - conditions: "{{ cluster == 8 and cmd == 'move' }}"
+        sequence:
+          - variables: { _i: 0 }
+          - repeat:
+              sequence:
+                - wait_for_trigger:
+                    # Release / stop
+                    - platform: event
+                      event_type: zha_event
+                      event_data: { device_id: !input remote, cluster_id: 8, command: "stop" }
+                    - platform: event
+                      event_type: zha_event
+                      event_data: { device_id: !input remote, cluster_id: 8, command: "stop_with_on_off" }
+                    # Opposite hold also cancels
+                    - platform: event
+                      event_type: zha_event
+                      event_data: { device_id: !input remote, cluster_id: 8, command: "move_with_on_off" }
+                  timeout: "{{ tick_s }}"
+                  continue_on_timeout: true
+                - choose:
+                    - conditions: "{{ not wait.completed }}"
+                      sequence:
+                        - service: light.turn_on
+                          target: !input light
+                          data: { brightness_step_pct: "{{ step_down }}", transition: 0 }
+                - variables: { _i: "{{ _i + 1 }}" }
+              until:
+                - condition: template
+                  value_template: "{{ wait.completed or (_i | int) >= (cap_ticks | int) }}"
+
+      # --- LEFT/RIGHT short → discrete color cycling ---
+      - conditions: "{{ cluster == 5 and cmd == 'press' and args in [[256,13,0],[257,13,0]] }}"
+        sequence:
+          - variables:
+              # Get first entity from target (for multi-entity targets)
+              light_entity: >
+                {% set ns = namespace(entity='') %}
+                {% if light is defined and light.entity_id is defined %}
+                  {% if light.entity_id is string %}
+                    {% set ns.entity = light.entity_id %}
+                  {% elif light.entity_id is iterable %}
+                    {% set ns.entity = light.entity_id[0] if light.entity_id | length > 0 else '' %}
+                  {% endif %}
+                {% endif %}
+                {{ ns.entity }}
+              
+              # Determine if light supports RGB or just color temp
+              supported_features: "{{ state_attr(light_entity, 'supported_color_modes') | default([]) }}"
+              supports_rgb: "{{ 'hs' in supported_features or 'rgb' in supported_features or 'xy' in supported_features }}"
+              supports_temp: "{{ 'color_temp' in supported_features }}"
+              
+              # Direction: RIGHT = forward, LEFT = backward
+              direction: "{{ 1 if args == [256,13,0] else -1 }}"
+
+          # Turn on light first if off
+          - service: light.turn_on
+            target: !input light
+            data: { transition: 0 }
+
+          - choose:
+              # RGB/HS color cycling - rotate hue
+              - conditions: "{{ supports_rgb }}"
+                sequence:
+                  - variables:
+                      current_hue: "{{ state_attr(light_entity, 'hs_color')[0] | default(0) if state_attr(light_entity, 'hs_color') else 0 }}"
+                      new_hue: "{{ (current_hue + (direction * hue_step_input)) % 360 }}"
+                  
+                  - service: light.turn_on
+                    target: !input light
+                    data:
+                      hs_color: ["{{ new_hue }}", 100]
+                      brightness_pct: 100
+                      transition: 0
+
+              # Color temperature cycling
+              - conditions: "{{ supports_temp }}"
+                sequence:
+                  - variables:
+                      current_temp: "{{ state_attr(light_entity, 'color_temp') | default(250) }}"
+                      min_temp: "{{ state_attr(light_entity, 'min_mireds') | default(153) }}"
+                      max_temp: "{{ state_attr(light_entity, 'max_mireds') | default(500) }}"
+                      new_temp: "{{ [min_temp, [max_temp, current_temp + (direction * color_temp_step_input)] | min] | max }}"
+                  
+                  - service: light.turn_on
+                    target: !input light
+                    data:
+                      color_temp: "{{ new_temp | int }}"
+                      transition: 0
+
+      # --- LEFT/RIGHT long press → smooth gradient cycling ---
+      - conditions: "{{ cluster == 5 and cmd == 'hold' }}"
+        sequence:
+          - variables:
+              # Get first entity from target (for multi-entity targets)
+              light_entity: >
+                {% set ns = namespace(entity='') %}
+                {% if light is defined and light.entity_id is defined %}
+                  {% if light.entity_id is string %}
+                    {% set ns.entity = light.entity_id %}
+                  {% elif light.entity_id is iterable %}
+                    {% set ns.entity = light.entity_id[0] if light.entity_id | length > 0 else '' %}
+                  {% endif %}
+                {% endif %}
+                {{ ns.entity }}
+              
+              # Determine if light supports RGB or just color temp
+              supported_features: "{{ state_attr(light_entity, 'supported_color_modes') | default([]) }}"
+              supports_rgb: "{{ 'hs' in supported_features or 'rgb' in supported_features or 'xy' in supported_features }}"
+              supports_temp: "{{ 'color_temp' in supported_features }}"
+              
+              # Direction: RIGHT (3328) = forward, LEFT (3329) = backward
+              direction: "{{ 1 if args == [3328, 0] else -1 }}"
+
+          # Turn on light first if off
+          - service: light.turn_on
+            target: !input light
+            data: { transition: 0 }
+
+          - choose:
+              # RGB gradient cycling
+              - conditions: "{{ supports_rgb }}"
+                sequence:
+                  - variables: { _i: 0 }
+                  - repeat:
+                      sequence:
+                        - variables:
+                            current_hue: "{{ state_attr(light_entity, 'hs_color')[0] | default(0) if state_attr(light_entity, 'hs_color') else 0 }}"
+                            new_hue: "{{ (current_hue + (direction * gradient_hue_step_input)) % 360 }}"
+                        
+                        - service: light.turn_on
+                          target: !input light
+                          data:
+                            hs_color: ["{{ new_hue }}", 100]
+                            brightness_pct: 100
+                            transition: 0
+                        
+                        # Wait for release or timeout
+                        - wait_for_trigger:
+                            - platform: event
+                              event_type: zha_event
+                              event_data: { device_id: !input remote, cluster_id: 5, command: "release" }
+                          timeout: "{{ gradient_tick_s }}"
+                          continue_on_timeout: true
+                        
+                        - variables: { _i: "{{ _i + 1 }}" }
+                      until:
+                        - condition: template
+                          value_template: "{{ wait.completed or (_i | int) >= (cap_ticks | int) }}"
+
+              # Color temperature gradient cycling
+              - conditions: "{{ supports_temp }}"
+                sequence:
+                  - variables: 
+                      _i: 0
+                      min_temp: "{{ state_attr(light_entity, 'min_mireds') | default(153) }}"
+                      max_temp: "{{ state_attr(light_entity, 'max_mireds') | default(500) }}"
+                  - repeat:
+                      sequence:
+                        - variables:
+                            current_temp: "{{ state_attr(light_entity, 'color_temp') | default(250) }}"
+                            new_temp_raw: "{{ current_temp + (direction * gradient_temp_step_input) }}"
+                            # Wrap around at boundaries for continuous cycling
+                            new_temp: >
+                              {% if new_temp_raw > max_temp %}
+                                {{ min_temp }}
+                              {% elif new_temp_raw < min_temp %}
+                                {{ max_temp }}
+                              {% else %}
+                                {{ new_temp_raw }}
+                              {% endif %}
+                        
+                        - service: light.turn_on
+                          target: !input light
+                          data:
+                            color_temp: "{{ new_temp | int }}"
+                            transition: 0
+                        
+                        # Wait for release or timeout
+                        - wait_for_trigger:
+                            - platform: event
+                              event_type: zha_event
+                              event_data: { device_id: !input remote, cluster_id: 5, command: "release" }
+                          timeout: "{{ gradient_tick_s }}"
+                          continue_on_timeout: true
+                        
+                        - variables: { _i: "{{ _i + 1 }}" }
+                      until:
+                        - condition: template
+                          value_template: "{{ wait.completed or (_i | int) >= (cap_ticks | int) }}"

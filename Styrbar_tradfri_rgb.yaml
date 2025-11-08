@@ -1,11 +1,11 @@
 blueprint:
-  name: IKEA Rodret - Tradfri RGB Lamp Control
-  description: Control IKEA Tradfri RGB lamp with Rodret remote - On/Off and color cycling
+  name: IKEA Styrbar - Tradfri RGB Lamp Control
+  description: Control IKEA Tradfri RGB lamp with Styrbar remote – On/Off and robust color cycling
   domain: automation
   input:
     remote:
-      name: IKEA Rodret Remote
-      description: Select the Rodret remote control
+      name: IKEA Styrbar Remote
+      description: Select the Styrbar remote control
       selector:
         device:
           integration: zha
@@ -31,15 +31,30 @@ action:
       command: "{{ trigger.event.data.command }}"
       light: !input target_light
       colors:
-        - [255, 0, 0]      # Red
+        - [255, 0, 0]      # Rot
         - [255, 127, 0]    # Orange
-        - [255, 255, 0]    # Yellow
-        - [0, 255, 0]      # Green
+        - [255, 255, 0]    # Gelb
+        - [0, 255, 0]      # Grün
         - [0, 255, 255]    # Cyan
-        - [0, 0, 255]      # Blue
+        - [0, 0, 255]      # Blau
         - [255, 0, 255]    # Magenta
-        - [255, 255, 255]  # White
+        - [255, 255, 255]  # Weiß
       current_color: "{{ state_attr(light, 'rgb_color') | list if state_attr(light, 'rgb_color') else none }}"
+      def_color_idx: >
+        {% set idx = -1 %}
+        {% set min_dist = 1000 %}
+        {% if current_color %}
+          {% for i in range(colors|length) %}
+            {% set dist = ((colors[i][0]-current_color[0])**2 + (colors[i][1]-current_color[1])**2 + (colors[i][2]-current_color[2])**2) ** 0.5 %}
+            {% if dist < min_dist %}
+              {% set idx = i %}
+              {% set min_dist = dist %}
+            {% endif %}
+          {% endfor %}
+          {{ idx }}
+        {% else %}
+          -1
+        {% endif %}
   - choose:
       - conditions:
           - condition: template
@@ -48,7 +63,6 @@ action:
           - service: light.turn_on
             target:
               entity_id: "{{ light }}"
-      
       - conditions:
           - condition: template
             value_template: "{{ command == 'off' }}"
@@ -56,7 +70,6 @@ action:
           - service: light.turn_off
             target:
               entity_id: "{{ light }}"
-      
       - conditions:
           - condition: template
             value_template: "{{ command == 'press' and trigger.event.data.args[0] == 257 }}"
@@ -66,17 +79,11 @@ action:
               entity_id: "{{ light }}"
             data:
               rgb_color: >
-                {% if current_color %}
-                  {% set current_idx = colors.index(current_color) if current_color in colors else -1 %}
-                  {% if current_idx >= 0 %}
-                    {{ colors[(current_idx + 1) % colors|length] }}
-                  {% else %}
-                    {{ colors[0] }}
-                  {% endif %}
+                {% if def_color_idx >= 0 %}
+                  {{ colors[(def_color_idx + 1) % colors|length] }}
                 {% else %}
                   {{ colors[0] }}
                 {% endif %}
-      
       - conditions:
           - condition: template
             value_template: "{{ command == 'press' and trigger.event.data.args[0] == 256 }}"
@@ -86,13 +93,8 @@ action:
               entity_id: "{{ light }}"
             data:
               rgb_color: >
-                {% if current_color %}
-                  {% set current_idx = colors.index(current_color) if current_color in colors else -1 %}
-                  {% if current_idx >= 0 %}
-                    {{ colors[(current_idx - 1) % colors|length] }}
-                  {% else %}
-                    {{ colors[-1] }}
-                  {% endif %}
+                {% if def_color_idx >= 0 %}
+                  {{ colors[(def_color_idx - 1) % colors|length] }}
                 {% else %}
                   {{ colors[-1] }}
                 {% endif %}

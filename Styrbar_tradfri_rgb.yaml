@@ -39,6 +39,7 @@ action:
         - [0, 0, 255]      # Blue
         - [255, 0, 255]    # Magenta
         - [255, 255, 255]  # White
+      current_color: "{{ state_attr(light, 'rgb_color') | list if state_attr(light, 'rgb_color') else none }}"
   - choose:
       - conditions:
           - condition: template
@@ -65,15 +66,13 @@ action:
               entity_id: "{{ light }}"
             data:
               rgb_color: >
-                {% set current = state_attr(light, 'rgb_color') %}
-                {% if current %}
-                  {% set idx = 0 %}
-                  {% for color in colors %}
-                    {% if color == current %}
-                      {% set idx = (loop.index % (colors | length)) %}
-                    {% endif %}
-                  {% endfor %}
-                  {{ colors[idx] }}
+                {% if current_color %}
+                  {% set current_idx = colors.index(current_color) if current_color in colors else -1 %}
+                  {% if current_idx >= 0 %}
+                    {{ colors[(current_idx + 1) % colors|length] }}
+                  {% else %}
+                    {{ colors[0] }}
+                  {% endif %}
                 {% else %}
                   {{ colors[0] }}
                 {% endif %}
@@ -87,15 +86,13 @@ action:
               entity_id: "{{ light }}"
             data:
               rgb_color: >
-                {% set current = state_attr(light, 'rgb_color') %}
-                {% if current %}
-                  {% set idx = (colors | length) - 1 %}
-                  {% for color in colors %}
-                    {% if color == current and loop.index > 1 %}
-                      {% set idx = loop.index - 2 %}
-                    {% endif %}
-                  {% endfor %}
-                  {{ colors[idx] }}
+                {% if current_color %}
+                  {% set current_idx = colors.index(current_color) if current_color in colors else -1 %}
+                  {% if current_idx >= 0 %}
+                    {{ colors[(current_idx - 1) % colors|length] }}
+                  {% else %}
+                    {{ colors[-1] }}
+                  {% endif %}
                 {% else %}
                   {{ colors[-1] }}
                 {% endif %}

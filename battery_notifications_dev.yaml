@@ -1,0 +1,72 @@
+blueprint:
+  name: Universal Battery Warning
+  description: Checks selected battery devices and sends warning notifications via app or email.
+  domain: automation
+
+input:
+  battery_entities:
+    name: Battery devices/entities
+    selector:
+      target:
+        entity:
+          device_class: battery
+  check_frequency:
+    name: Frequency (minutes/days)
+    selector:
+      number:
+        min: 1
+        max: 1440
+        unit_of_measurement: 'min'
+        mode: slider
+        step: 1
+  battery_threshold:
+    name: Warning threshold (%)
+    selector:
+      number:
+        min: 5
+        max: 100
+        unit_of_measurement: '%'
+        step: 5
+  notify_device:
+    name: Notify phone (optional)
+    selector:
+      device:
+        integration: mobile_app
+  smtp_recipient:
+    name: Email address (optional)
+    default: ""
+    selector:
+      text:
+  smtp_service:
+    name: SMTP notify service
+    default: "notify.smtp_notify"
+    selector:
+      text:
+
+variables:
+  sensors:
+    # Template to list entities below threshold
+
+trigger:
+  - platform: time_pattern
+    minutes: "/!input check_frequency"
+
+condition:
+  - > # Template: sensors below threshold
+
+action:
+  - choose:
+      - conditions:
+          - "{{ notify_device is defined }}"
+        sequence:
+          - service: notify.mobile_app_{{ notify_device }}
+            data:
+              message: "Low battery warning for: {{ sensors }}"
+      - conditions:
+          - "{{ smtp_recipient != '' }}"
+        sequence:
+          - service: !input smtp_service
+            data:
+              title: "Home Assistant - Battery Monitor"
+              message: "Low battery detected in {{ sensors }}"
+              recipient: !input smtp_recipient

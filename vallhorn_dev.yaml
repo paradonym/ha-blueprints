@@ -1,0 +1,91 @@
+blueprint:
+  name: Flurlicht mit zwei IKEA Vallhorn Bewegungsmeldern (Optimierte Logik)
+  description: |
+    Kombiniert zwei Opening-Sensoren zur Lichtsteuerung. Schaltet Licht sofort bei Bewegung an mindestens einem Sensor ein. Licht geht erst aus, wenn beide für die eingestellte Zeit keine Bewegung zeigen.
+  domain: automation
+  input:
+    opening_sensor_1:
+      name: Bewegungsmelder Flur 1 Öffnung
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+              device_class: opening
+    opening_sensor_2:
+      name: Bewegungsmelder Flur 2 Öffnung
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+              device_class: opening
+    target_lights:
+      name: Lampen im Flur
+      selector:
+        target:
+          entity:
+            - domain: light
+    no_motion_wait:
+      name: Wartezeit nach letzter Bewegung (Sekunden)
+      default: 120
+      selector:
+        number:
+          min: 10
+          max: 600
+          unit_of_measurement: seconds
+
+mode: restart
+
+trigger:
+  - platform: state
+    entity_id: !input opening_sensor_1
+    to: "on"
+    id: "motion_on_1"
+  - platform: state
+    entity_id: !input opening_sensor_2
+    to: "on"
+    id: "motion_on_2"
+  - platform: state
+    entity_id: !input opening_sensor_1
+    to: "off"
+    id: "motion_off_1"
+  - platform: state
+    entity_id: !input opening_sensor_2
+    to: "off"
+    id: "motion_off_2"
+
+action:
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: "motion_on_1"
+              - condition: trigger
+                id: "motion_on_2"
+        sequence:
+          - service: light.turn_on
+            target: !input target_lights
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: "motion_off_1"
+              - condition: trigger
+                id: "motion_off_2"
+        sequence:
+          - wait_template: >
+              {{ is_state(opening_sensor_1, 'off') and is_state(opening_sensor_2, 'off') }}
+            timeout:
+              seconds: 10
+            continue_on_timeout: false
+          - delay:
+              seconds: !input no_motion_wait
+          - condition: template
+            value_template: >
+              {{ is_state(opening_sensor_1, 'off') and is_state(opening_sensor_2, 'off') }}
+          - service: light.turn_off
+            target: !input target_lights
+
+variables:
+  opening_sensor_1: !input opening_sensor_1
+  opening_sensor_2: !input opening_sensor_2

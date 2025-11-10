@@ -1,5 +1,5 @@
 blueprint:
-  name: Flurlicht mit zwei IKEA Vallhorn Bewegungsmeldern (Optimierte Logik)
+  name: IKEA VALLHORN 2x OR for on, 2x AND for off
   description: |
     Kombiniert zwei Opening-Sensoren zur Lichtsteuerung. Schaltet Licht sofort bei Bewegung an mindestens einem Sensor ein. Licht geht erst aus, wenn beide für die eingestellte Zeit keine Bewegung zeigen.
   domain: automation

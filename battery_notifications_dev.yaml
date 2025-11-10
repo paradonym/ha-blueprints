@@ -66,20 +66,22 @@ action:
           - condition: template
             value_template: "{{ low_battery_entities | length > 0 }}"
         sequence:
-          - service: >
-              {% if notify_device is defined and notify_device != none %}
-                notify.mobile_app_{{ notify_device.id }}
-              {% else %}
-                null
-              {% endif %}
-            data:
-              message: >
-                Low battery warning for devices: {{ low_battery_entities | join(', ') }}
-          - condition: template
-            value_template: "{{ smtp_recipient != '' }}"
-          - service: !input smtp_service
-            data:
-              title: "Home Assistant Battery Warning"
-              message: "Low battery on devices: {{ low_battery_entities | join(', ') }}"
-              target:
-                - !input smtp_recipient
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_device is not none }}"
+                sequence:
+                  - service: "notify.mobile_app_{{ notify_device.id }}"
+                    data:
+                      message: "Low battery warning for devices: {{ low_battery_entities | join(', ') }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ smtp_recipient != '' }}"
+                sequence:
+                  - service: !input smtp_service
+                    data:
+                      title: "Home Assistant Battery Warning"
+                      message: "Low battery on devices: {{ low_battery_entities | join(', ') }}"
+                      target:
+                        - !input smtp_recipient

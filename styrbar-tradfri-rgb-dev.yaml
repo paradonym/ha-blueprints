@@ -70,6 +70,10 @@ action:
           - service: light.turn_on
             target:
               entity_id: "{{ light }}"
+            data:
+              color_mode: xy
+              xy_color: "{{ colors[0] }}"
+              brightness: 254
       - conditions:
           - condition: template
             value_template: "{{ command == 'off' }}"

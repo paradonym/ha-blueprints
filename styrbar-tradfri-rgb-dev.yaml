@@ -58,49 +58,48 @@ action:
         {% else %}
           -1
         {% endif %}
-  
-- choose:
-    - conditions:
-        - condition: template
-          value_template: "{{ command == 'on' }}"
-      sequence:
-        - service: light.turn_on
-          target:
-            entity_id: "{{ light }}"
-    - conditions:
-        - condition: template
-          value_template: "{{ command == 'off' }}"
-      sequence:
-        - service: light.turn_off
-          target:
-            entity_id: "{{ light }}"
-    - conditions:
-        - condition: template
-          value_template: "{{ command == 'press' and trigger.event.data.args[0] == 257 }}"
-      sequence:
-        - service: light.turn_on
-          target:
-            entity_id: "{{ light }}"
-          data:
-            color_mode: xy
-            xy_color: >
-              {% if def_color_idx >= 0 %}
-                {{ colors[(def_color_idx + 1) % colors|length] }}
-              {% else %}
-                {{ colors[0] }}
-              {% endif %}
-    - conditions:
-        - condition: template
-          value_template: "{{ command == 'press' and trigger.event.data.args[0] == 256 }}"
-      sequence:
-        - service: light.turn_on
-          target:
-            entity_id: "{{ light }}"
-          data:
-            color_mode: xy
-            xy_color: >
-              {% if def_color_idx >= 0 %}
-                {{ colors[(def_color_idx - 1) % colors|length] }}
-              {% else %}
-                {{ colors[-1] }}
-              {% endif %}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'on' }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: "{{ light }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'off' }}"
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: "{{ light }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'press' and trigger.event.data.args[0] == 257 }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: "{{ light }}"
+            data:
+              color_mode: xy
+              xy_color: >
+                {% if def_color_idx >= 0 %}
+                  {{ colors[(def_color_idx + 1) % colors|length] }}
+                {% else %}
+                  {{ colors[0] }}
+                {% endif %}
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'press' and trigger.event.data.args[0] == 256 }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: "{{ light }}"
+            data:
+              color_mode: xy
+              xy_color: >
+                {% if def_color_idx >= 0 %}
+                  {{ colors[(def_color_idx - 1) % colors|length] }}
+                {% else %}
+                  {{ colors[-1] }}
+                {% endif %}

@@ -46,7 +46,7 @@ action:
         {% else %}
           none
         {% endif %}
-      def_color_idx: |-
+      def_color_idx: >-
         {% set max_dist = 0.05 %}
         {% set ns = namespace(idx=-1, min_dist=max_dist) %}
         {% if current_color %}
@@ -57,7 +57,7 @@ action:
               {% set ns.min_dist = dist %}
             {% endif %}
           {% endfor %}
-          {{ ns.idx }}
+          {{ ns.idx | int }}
         {% else %}
           -1
         {% endif %}

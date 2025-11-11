@@ -1,0 +1,106 @@
+blueprint:
+  name: DEV VARIANT IKEA Styrbar - Tradfri RGB Lamp Control
+  description: DEVELOPMENT VARIANT Control IKEA Tradfri RGB lamp with Styrbar remote – FIXED color cycling
+  domain: automation
+  input:
+    remote:
+      name: IKEA Styrbar Remote
+      description: Select the Styrbar remote control
+      selector:
+        device:
+          integration: zha
+    target_light:
+      name: Tradfri RGB Lamp
+      description: Select the Tradfri RGB lamp to control
+      selector:
+        entity:
+          domain: light
+          integration: zha
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: event
+    event_type: zha_event
+    event_data:
+      device_id: !input remote
+
+action:
+  - variables:
+      command: "{{ trigger.event.data.command }}"
+      light: !input target_light
+      colors:
+        - [0.701, 0.299]   # Rot
+        - [0.561, 0.405]   # Orange
+        - [0.448, 0.517]   # Gelb
+        - [0.172, 0.747]   # Grün
+        - [0.151, 0.343]   # Cyan
+        - [0.136, 0.04]    # Blau
+        - [0.385, 0.155]   # Magenta
+        - [0.512, 0.415]   # Warmweiß 1
+        - [0.456, 0.403]   # Warmweiß 2
+        - [0.412, 0.386]   # Warmweiß 3
+        - [0.381, 0.370]   # Warmweiß 4
+        - [0.323, 0.329]   # Kaltweiß
+      current_color: "{{ state_attr(light, 'xy_color') | list if state_attr(light, 'xy_color') else none }}"
+      def_color_idx: >
+        {% set ns = namespace(idx=-1, min_dist=1000) %}
+        {% if current_color %}
+          {% for i in range(colors|length) %}
+            {% set dist = ((colors[i][0]-current_color[0])**2 + (colors[i][1]-current_color[1])**2) ** 0.5 %}
+            {% if dist < ns.min_dist %}
+              {% set ns.idx = i %}
+              {% set ns.min_dist = dist %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.idx }}
+        {% else %}
+          -1
+        {% endif %}
+  
+- choose:
+    - conditions:
+        - condition: template
+          value_template: "{{ command == 'on' }}"
+      sequence:
+        - service: light.turn_on
+          target:
+            entity_id: "{{ light }}"
+    - conditions:
+        - condition: template
+          value_template: "{{ command == 'off' }}"
+      sequence:
+        - service: light.turn_off
+          target:
+            entity_id: "{{ light }}"
+    - conditions:
+        - condition: template
+          value_template: "{{ command == 'press' and trigger.event.data.args[0] == 257 }}"
+      sequence:
+        - service: light.turn_on
+          target:
+            entity_id: "{{ light }}"
+          data:
+            color_mode: xy
+            xy_color: >
+              {% if def_color_idx >= 0 %}
+                {{ colors[(def_color_idx + 1) % colors|length] }}
+              {% else %}
+                {{ colors[0] }}
+              {% endif %}
+    - conditions:
+        - condition: template
+          value_template: "{{ command == 'press' and trigger.event.data.args[0] == 256 }}"
+      sequence:
+        - service: light.turn_on
+          target:
+            entity_id: "{{ light }}"
+          data:
+            color_mode: xy
+            xy_color: >
+              {% if def_color_idx >= 0 %}
+                {{ colors[(def_color_idx - 1) % colors|length] }}
+              {% else %}
+                {{ colors[-1] }}
+              {% endif %}

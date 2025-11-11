@@ -79,7 +79,6 @@ action:
             target:
               entity_id: "{{ light }}"
             data:
-              color_mode: xy
               xy_color: "{{ colors[0] }}"
               brightness: 254
           # The above on-button behavior fix was made by Perplexity AI based on recent debugging and test results (Nov 2025)
@@ -99,7 +98,6 @@ action:
             target:
               entity_id: "{{ light }}"
             data:
-              color_mode: xy
               xy_color: |
                 {% if def_color_idx >= 0 %}
                   {{ colors[(def_color_idx + 1) % colors|length] }}
@@ -114,7 +112,6 @@ action:
             target:
               entity_id: "{{ light }}"
             data:
-              color_mode: xy
               xy_color: |
                 {% if def_color_idx >= 0 %}
                   {{ colors[(def_color_idx - 1) % colors|length] }}

@@ -44,7 +44,7 @@ action:
         - [0.381, 0.370]   # Warmweiß 4
         - [0.323, 0.329]   # Kaltweiß
       current_color: "{{ state_attr(light, 'xy_color') | list if state_attr(light, 'xy_color') else none }}"
-      def_color_idx: >
+      def_color_idx: |
         {% set ns = namespace(idx=-1, min_dist=1000) %}
         {% if current_color %}
           {% for i in range(colors|length) %}
@@ -82,7 +82,7 @@ action:
               entity_id: "{{ light }}"
             data:
               color_mode: xy
-              xy_color: >
+              xy_color: |
                 {% if def_color_idx >= 0 %}
                   {{ colors[(def_color_idx + 1) % colors|length] }}
                 {% else %}
@@ -97,7 +97,7 @@ action:
               entity_id: "{{ light }}"
             data:
               color_mode: xy
-              xy_color: >
+              xy_color: |
                 {% if def_color_idx >= 0 %}
                   {{ colors[(def_color_idx - 1) % colors|length] }}
                 {% else %}

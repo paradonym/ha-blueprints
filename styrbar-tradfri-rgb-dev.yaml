@@ -49,9 +49,11 @@ action:
       def_color_idx: >-
         {% set max_dist = 0.05 %}
         {% set ns = namespace(idx=-1, min_dist=max_dist) %}
-        {% if current_color %}
+        {% set xy = state_attr(light, 'xy_color') %}
+        {% if xy is not none and state_attr(light, 'color_mode') == 'xy' %}
+          {% set current = [xy[0] | float, xy[1] | float] %}
           {% for i in range(colors|length) %}
-            {% set dist = ((colors[i][0]-current_color[0])**2 + (colors[i][1]-current_color[1])**2) ** 0.5 %}
+            {% set dist = ((colors[i][0]-current[0])**2 + (colors[i][1]-current[1])**2) ** 0.5 %}
             {% if dist < ns.min_dist %}
               {% set ns.idx = i %}
               {% set ns.min_dist = dist %}
@@ -61,6 +63,7 @@ action:
         {% else %}
           -1
         {% endif %}
+
 
   - choose:
       - conditions:

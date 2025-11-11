@@ -39,13 +39,16 @@ action:
         - [0.136, 0.04]    # Blau
         - [0.385, 0.155]   # Magenta
         - [0.512, 0.415]   # Warmweiß 1
-        - [0.456, 0.403]   # Warmweiß 2
-        - [0.412, 0.386]   # Warmweiß 3
-        - [0.381, 0.370]   # Warmweiß 4
-        - [0.323, 0.329]   # Kaltweiß
-      current_color: "{{ state_attr(light, 'xy_color') | list if state_attr(light, 'xy_color') else none }}"
-      def_color_idx: |
-        {% set ns = namespace(idx=-1, min_dist=1000) %}
+        - [0.323, 0.329]   # Kaltweiß (only one white for more robust cycling)
+      current_color: >-
+        {% if state_attr(light, 'color_mode') == 'xy' %}
+          {{ state_attr(light, 'xy_color') | list if state_attr(light, 'xy_color') else none }}
+        {% else %}
+          none
+        {% endif %}
+      def_color_idx: |-
+        {% set max_dist = 0.05 %}
+        {% set ns = namespace(idx=-1, min_dist=max_dist) %}
         {% if current_color %}
           {% for i in range(colors|length) %}
             {% set dist = ((colors[i][0]-current_color[0])**2 + (colors[i][1]-current_color[1])**2) ** 0.5 %}
@@ -58,6 +61,7 @@ action:
         {% else %}
           -1
         {% endif %}
+
   - choose:
       - conditions:
           - condition: template

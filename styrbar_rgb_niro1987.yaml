@@ -18,8 +18,11 @@ blueprint:
       selector:
         device:
           multiple: false
-          filter:
-            - integration: zha
+      filter:
+        - integration: zha
+          manufacturer: IKEA of Sweden
+          model: STYRBAR remote control
+
     light:
       name: Light
       description: Select the light entity you wish to control.

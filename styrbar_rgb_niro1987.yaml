@@ -20,8 +20,6 @@ blueprint:
           multiple: false
           filter:
             - integration: zha
-              manufacturer: IKEA of Sweden
-              model: E2001/E2002
     light:
       name: Light
       description: Select the light entity you wish to control.

@@ -1,0 +1,174 @@
+blueprint:
+  name: E‑Bike Ladegerät – Leistungsbasierte Steuerung
+  description: >
+    Schaltet ein Ladegerät über einen Smart‑Plug (z.B. IKEA INSPELNING) zeitweise ein,
+    prüft anhand der Leistungsaufnahme, ob ein Akku angeschlossen / noch am Laden ist
+    und schaltet den Strom wieder ab, inkl. Benachrichtigung.
+  domain: automation
+  input:
+    plug_switch:
+      name: Steckdose (Ladegerät)
+      description: Smart‑Plug, an dem das Ladegerät hängt (z.B. IKEA INSPELNING).
+      selector:
+        entity:
+          domain: switch
+
+    plug_power:
+      name: Leistungssensor
+      description: Entität, die die aktuelle Leistung in Watt liefert.
+      selector:
+        entity:
+          domain: sensor
+
+    check_interval_minutes:
+      name: Prüfintervall (Minuten)
+      description: Wie oft soll pro Stunde geprüft werden (z.B. 5 = alle 5 Minuten)?
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: min
+          mode: slider
+          step: 1
+
+    warmup_seconds:
+      name: Einschalt‑Wartezeit (Sekunden)
+      description: Zeit zwischen Einschalten des Steckers und Leistungsprüfung.
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 120
+          unit_of_measurement: s
+          mode: slider
+          step: 5
+
+    idle_power_watt:
+      name: Leerlauf‑Leistung (Watt)
+      description: Leistungsschwelle, unterhalb derer kein Akku angenommen wird.
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 10
+          unit_of_measurement: W
+          mode: box
+          step: 0.1
+
+    charging_power_watt:
+      name: Lade‑Start‑Schwelle (Watt)
+      description: Leistungsschwelle, ab der ein „leer/ladender“ Akku erkannt wird.
+      default: 100
+      selector:
+        number:
+          min: 5
+          max: 1000
+          unit_of_measurement: W
+          mode: box
+          step: 1
+
+    charged_power_watt:
+      name: Fast voll / Abschalt‑Schwelle (Watt)
+      description: Fällt die Leistung darunter, wird Laden als beendet angesehen.
+      default: 40
+      selector:
+        number:
+          min: 1
+          max: 500
+          unit_of_measurement: W
+          mode: box
+          step: 1
+
+    notify_device:
+      name: Benachrichtigungsgerät (optional)
+      description: Mobilgerät o.ä. für eine Nachricht, wenn das Laden fertig ist.
+      default: []
+      selector:
+        device:
+          integration: mobile_app
+          multiple: false
+
+mode: single
+max_exceeded: silent
+
+trigger:
+  - platform: time_pattern
+    # alle X Minuten prüfen
+    minutes: "/{{ iif(blueprint.inputs.check_interval_minutes | int > 0,
+                      blueprint.inputs.check_interval_minutes | int,
+                      5) }}"
+
+condition: []
+
+action:
+  - variables:
+      plug_switch: !input plug_switch
+      plug_power: !input plug_power
+      warmup_seconds: !input warmup_seconds
+      idle_power_watt: !input idle_power_watt
+      charging_power_watt: !input charging_power_watt
+      charged_power_watt: !input charged_power_watt
+
+  # Steckdose einschalten, wenn sie aus ist
+  - if:
+      - condition: state
+        entity_id: !input plug_switch
+        state: "off"
+    then:
+      - service: switch.turn_on
+        target:
+          entity_id: !input plug_switch
+
+  # Aufwärmzeit, bis das Ladegerät „richtig“ Strom zieht
+  - delay:
+      seconds: "{{ warmup_seconds | int }}"
+
+  # Aktuellen Leistungswert lesen
+  - variables:
+      current_power: "{{ states(plug_power) | float(0) }}"
+
+  # Fall 1: Unter Leerlauf‑Schwelle → kein Akku, abschalten
+  - if:
+      - condition: template
+        value_template: "{{ current_power < idle_power_watt | float(0) }}"
+    then:
+      - service: switch.turn_off
+        target:
+          entity_id: !input plug_switch
+      - stop: "Kein Akku erkannt (unter Idle‑Schwelle)."
+
+  # Fall 2: Über Lade‑Start‑Schwelle → Akku lädt, an lassen
+  - if:
+      - condition: template
+        value_template: "{{ current_power >= charging_power_watt | float(0) }}"
+    then:
+      - stop: "Akku lädt stark, Steckdose bleibt an."
+
+  # Fall 3: Zwischen Idle und Lade‑Start → vermutlich schon weiter geladen.
+  #   Hier wird gewartet, bis unter charged_power_watt gefallen wird,
+  #   dann abschalten und benachrichtigen.
+  - repeat:
+      sequence:
+        - delay:
+            seconds: 30
+        - variables:
+            current_power: "{{ states(plug_power) | float(0) }}"
+        - if:
+            - condition: template
+              value_template: "{{ current_power <= charged_power_watt | float(0) }}"
+          then:
+            - service: switch.turn_off
+              target:
+                entity_id: !input plug_switch
+            - choose:
+                - conditions: "{{ not (input_notify_device is none or input_notify_device == []) }}"
+                  sequence:
+                    - service: notify.mobile_app_{{ device_attr((!input notify_device),'name')|lower|replace(' ','_') }}
+                      data:
+                        title: "E‑Bike Akku geladen"
+                        message: "Die Leistung ist unter {{ charged_power_watt }} W gefallen. Steckdose wurde ausgeschaltet."
+            - stop: "Akku gilt als voll (unter Schwelle)."
+      until:
+        - condition: template
+          value_template: "{{ current_power <= charged_power_watt | float(0) }}"
